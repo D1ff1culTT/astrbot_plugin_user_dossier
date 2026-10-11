@@ -214,12 +214,12 @@ function renderStatus() {
   label.textContent = "当前状态";
   const hint = document.createElement("span");
   hint.className = "setting-desc";
-  hint.textContent = "一句话描述用户近况（在做什么、心情、位置）";
+  hint.textContent = "阶段性总状态（如备考、放假、出差），不要填一次性琐事";
   head.append(label, hint);
 
   const area = document.createElement("textarea");
   area.className = "status-area";
-  area.placeholder = "例如：最近在准备考试，心情不错";
+  area.placeholder = "例如：备考中，压力有点大";
   area.value = state.draft.status;
   area.addEventListener("input", () => {
     state.draft.status = area.value;

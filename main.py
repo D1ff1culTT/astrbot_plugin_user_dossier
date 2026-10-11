@@ -111,7 +111,7 @@ def _build_reminder_text(count: int) -> str:
         f"该用户近期有 {count} 条新消息尚未归档。请回顾最近对话，判断是否包含值得长期记住的信息：\n"
         "1. 基础信息（性别、年龄、职业、所在地等）\n"
         "2. 喜好与性格（喜欢/讨厌的事物、爱好、性格特点）\n"
-        "3. 当前状态（正在做什么、心情、所在地）\n"
+        "3. 阶段性总状态（如备考、放假、出差、工作忙碌期——持续一段时间的处境，不是此刻正在做的琐事）\n"
         "4. 事务偏好（希望 AI 如何完成任务、注意事项）\n"
         "5. 经验教训（用户不满、指责或纠正你之后，总结出的正确做法）\n"
         "如有以上信息，请调用 update_user_profile 工具记录（可多次调用）；"
@@ -278,7 +278,7 @@ class UserDossierPlugin(Star):
         每次调用记录一条信息，可以连续多次调用。
 
         Args:
-            category(string): 档案类别，必须是 basic、preference、status、task_preference、lesson、note 之一。basic=基础信息（性别/年龄/职业/所在地等）；preference=喜好与性格（喜欢/讨厌的事物、爱好、性格特点）；status=当前状态（正在做什么/心情/所在地，新内容会覆盖旧状态）；task_preference=事务偏好（希望 AI 如何完成任务、注意事项）；lesson=经验教训（用户不满或纠正后总结出的正确做法）；note=用户明确要求记住的事项。
+            category(string): 档案类别，必须是 basic、preference、status、task_preference、lesson、note 之一。basic=基础信息（性别/年龄/职业/所在地等）；preference=喜好与性格（喜欢/讨厌的事物、爱好、性格特点）；status=阶段性总状态（如备考、放假、出差、生病休养等工作/生活的整体处境，可带心情基调；不要记录正在做的具体琐事，例如"正在做第几道题"；新内容会覆盖旧状态）；task_preference=事务偏好（希望 AI 如何完成任务、注意事项）；lesson=经验教训（用户不满或纠正后总结出的正确做法）；note=用户明确要求记住的事项。
             content(string): 要记录的一条信息，用简洁的一句话描述，例如"喜欢吃川菜"。
         """
         if not self._cfg("enabled", True) or not self._cfg("tool_enabled", True):

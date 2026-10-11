@@ -55,7 +55,7 @@ git clone https://github.com/D1ff1culTT/astrbot_plugin_user_dossier
 
 1. **计数**：插件监听用户消息，同一用户累计发送 `remind_after_messages`（默认 20）条后，标记"待提醒"；
 2. **提醒**：该用户下一次对话触发 LLM 请求时，注入一段内部提醒，让 AI 回顾最近对话、判断是否有值得长期记住的信息；
-3. **记录**：AI 判断需要记录时调用 `update_user_profile` 工具，按类别（基础信息 / 喜好 / 状态 / 事务偏好 / 经验教训 / 明确要求）把一条条信息写入该用户的档案；
+3. **记录**：AI 判断需要记录时调用 `update_user_profile` 工具，按类别（基础信息 / 喜好 / 阶段状态 / 事务偏好 / 经验教训 / 明确要求）把一条条信息写入该用户的档案；
 4. **注入**：档案更新后，之后的每轮对话都会把该用户的档案注入给 AI。
 
 > 提醒与档案都通过 `extra_user_content_parts` 以**临时内容块**注入：只作用于本轮请求，不写入会话历史，也不会破坏提示词缓存。
@@ -83,6 +83,8 @@ git clone https://github.com/D1ff1culTT/astrbot_plugin_user_dossier
 
 档案保存在 `data/plugin_data/astrbot_plugin_user_dossier/profiles/`，每名用户一份 JSON：
 
+> `status` 记录的是**阶段性总状态**（如备考、放假、出差这类持续一段时间的处境），不记录"正在做某道题"这类一次性琐事。
+
 ```json
 {
   "version": 1,
@@ -92,7 +94,7 @@ git clone https://github.com/D1ff1culTT/astrbot_plugin_user_dossier
   "basic_info": ["性别：男", "职业：程序员"],
   "preferences": ["喜欢吃川菜", "性格比较直接"],
   "status": {
-    "summary": "最近在准备考试，心情不错",
+    "summary": "备考中，压力有点大",
     "updated_at": "2026-10-11 12:00:00"
   },
   "task_preferences": ["回答时先给结论"],
