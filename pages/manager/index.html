@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>用户档案管理</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <h1>用户档案管理</h1>
+          <span id="summary" class="subtitle">加载中…</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="btn-refresh" class="btn ghost" type="button">刷新</button>
+          <button id="btn-settings" class="btn ghost" type="button">插件设置</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="sidebar">
+          <input
+            id="search"
+            class="input search"
+            type="search"
+            placeholder="搜索昵称或用户 ID…"
+            autocomplete="off"
+          />
+          <ul id="profile-list" class="profile-list"></ul>
+          <div id="list-empty" class="empty hidden"></div>
+        </aside>
+
+        <section id="editor" class="editor">
+          <div class="placeholder">在左侧选择一位用户，查看或编辑其档案</div>
+        </section>
+      </main>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-backdrop" data-close="1"></div>
+      <div class="modal-card">
+        <header class="modal-head">
+          <h2>插件设置</h2>
+          <button id="btn-settings-close" class="icon-btn" type="button" aria-label="关闭">✕</button>
+        </header>
+        <div id="settings-body" class="modal-body"></div>
+        <footer class="modal-foot">
+          <button id="btn-settings-save" class="btn primary" type="button">保存设置</button>
+        </footer>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

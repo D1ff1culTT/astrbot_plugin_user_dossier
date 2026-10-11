@@ -1,0 +1,14 @@
+{
+  "pages": {
+    "manager": {
+      "title": "User Dossier Manager",
+      "description": "View and edit user profiles, adjust plugin settings, and trigger profile summaries."
+    }
+  },
+  "views": {
+    "manager": {
+      "title": "User Dossier Manager",
+      "description": "View and edit user profiles, adjust plugin settings, and trigger profile summaries."
+    }
+  }
+}

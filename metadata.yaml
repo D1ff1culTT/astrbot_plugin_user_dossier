@@ -5,4 +5,4 @@ short_desc: 自动总结并维护每位用户的个人档案，注入对话让 A
 version: v1.0.0
 author: D1ff1culTT
 repo: https://github.com/D1ff1culTT/astrbot_plugin_user_dossier
-astrbot_version: ">=4.24.2,<5"
+astrbot_version: ">=4.26.0,<5"

@@ -116,7 +116,8 @@ def _normalize_profile(data: dict[str, Any], platform: str, user_id: str) -> dic
     for field in LIST_FIELDS:
         items = profile.get(field)
         if isinstance(items, list):
-            profile[field] = [str(item).strip() for item in items if str(item).strip()]
+            cleaned = [clean_content(item) for item in items]
+            profile[field] = [item for item in cleaned if item]
         else:
             profile[field] = []
 
@@ -439,3 +440,58 @@ class ProfileStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
+
+    # ------------------------------------------------------------------ 管理端
+
+    async def list_profiles(self) -> list[dict[str, Any]]:
+        """扫描档案目录，返回全部档案的摘要列表（按更新时间倒序）。"""
+        summaries: list[dict[str, Any]] = []
+        for path in sorted(self.base_dir.glob("*.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, UnicodeDecodeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            platform = str(data.get("platform") or "").strip()
+            user_id = str(data.get("user_id") or "").strip()
+            if not platform or not user_id:
+                continue
+            profile = _normalize_profile(data, platform, user_id)
+            summaries.append(
+                {
+                    "platform": platform,
+                    "user_id": user_id,
+                    "display_name": profile.get("display_name") or "",
+                    "entries": count_entries(profile),
+                    "status": (profile.get("status") or {}).get("summary") or "",
+                    "updated_at": profile.get("updated_at") or "",
+                    "created_at": profile.get("created_at") or "",
+                }
+            )
+        summaries.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+        return summaries
+
+    async def save_profile(
+        self,
+        platform: str,
+        user_id: str,
+        display_name: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """用编辑后的数据覆盖保存已有档案；档案不存在时返回 None。"""
+        key = self.cache_key(platform, user_id)
+        lock = self._lock_for(key)
+        async with lock:
+            existing = await self.load(platform, user_id, create=False)
+            if existing is None:
+                return None
+            profile = _normalize_profile(data if isinstance(data, dict) else {}, platform, user_id)
+            # 保留管理端不可编辑的字段
+            profile["created_at"] = existing.get("created_at") or profile["created_at"]
+            profile["stats"] = dict(existing.get("stats") or profile["stats"])
+            clean_name = clean_content(display_name)
+            profile["display_name"] = clean_name or existing.get("display_name") or ""
+            profile["updated_at"] = now_str()
+            await self._save(platform, user_id, profile)
+            return profile
