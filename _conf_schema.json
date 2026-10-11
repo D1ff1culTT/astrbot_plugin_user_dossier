@@ -1,0 +1,66 @@
+{
+  "enabled": {
+    "description": "总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后不再统计、更新和注入任何用户档案。"
+  },
+  "remind_after_messages": {
+    "description": "档案维护提醒阈值（消息条数）",
+    "type": "int",
+    "default": 20,
+    "slider": {
+      "min": 5,
+      "max": 200,
+      "step": 1
+    },
+    "hint": "用户累计发送该数量的消息后，下一次对话会注入一段提醒，由 AI 判断是否需要更新档案。"
+  },
+  "tool_enabled": {
+    "description": "启用档案更新工具",
+    "type": "bool",
+    "default": true,
+    "hint": "注册 update_user_profile 工具，允许 AI 在对话中自主记录用户信息。关闭后仅保留手动更新指令。"
+  },
+  "inject_enabled": {
+    "description": "对话时注入用户档案",
+    "type": "bool",
+    "default": true,
+    "hint": "把当前用户的档案作为临时内容块注入给 AI，让它了解正在对话的人。"
+  },
+  "inject_max_chars": {
+    "description": "注入档案的最大字符数",
+    "type": "int",
+    "default": 1200,
+    "slider": {
+      "min": 200,
+      "max": 5000,
+      "step": 100
+    },
+    "hint": "档案内容超过该长度时会被截断，避免占用过多 token。"
+  },
+  "context_size": {
+    "description": "总结回顾的消息条数",
+    "type": "int",
+    "default": 30,
+    "slider": {
+      "min": 10,
+      "max": 100,
+      "step": 5
+    },
+    "hint": "执行 /profile update 手动总结时，回顾最近多少条对话。"
+  },
+  "summary_provider_id": {
+    "description": "进行档案总结的模型",
+    "type": "string",
+    "_special": "select_provider",
+    "default": "",
+    "hint": "留空则使用当前会话正在使用的模型。"
+  },
+  "allow_admin_view": {
+    "description": "允许管理员查看/清除他人档案",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 /profile admin 指令将被禁用。"
+  }
+}

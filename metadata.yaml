@@ -1,0 +1,8 @@
+name: astrbot_plugin_user_dossier # 插件唯一识别名
+display_name: 用户档案 # 用于展示的名字
+desc: 根据对话自动总结、持续更新每位用户的个人档案（基础信息 / 喜好性格 / 个人状态 / 事务偏好 / 经验教训），并在对话时注入给 AI，让机器人真正"认识"每一位用户。
+short_desc: 自动总结并维护每位用户的个人档案，注入对话让 AI 了解用户。
+version: v1.0.0
+author: D1ff1culTT
+repo: https://github.com/D1ff1culTT/astrbot_plugin_user_dossier
+astrbot_version: ">=4.24.2,<5"

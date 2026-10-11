@@ -1,0 +1,13 @@
+# Ruff 配置（AstrBot 官方推荐使用 ruff 做格式化与静态检查）
+line-length = 100
+target-version = "py310"
+
+[lint]
+# 明确一份温和而实用的规则集：
+# E4/E7/E9/F/W 为 Python 核心错误检查，I 为 import 排序，B/C4/SIM 为常见 bug 与简化建议。
+select = ["E4", "E7", "E9", "F", "W", "I", "B", "C4", "SIM"]
+# 插件需要防御性地捕获所有异常以保证不阻塞聊天流程，因此豁免盲捕获相关规则。
+extend-ignore = [
+    "BLE001",
+    "SIM105",
+]
