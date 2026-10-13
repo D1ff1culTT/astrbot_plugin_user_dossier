@@ -411,6 +411,76 @@ class ProfileStore:
                 await self._save(platform, user_id, profile)
             return changed
 
+    async def rename_identity(
+        self,
+        old_platform: str,
+        new_platform: str,
+        user_id: str,
+        clear_display_name: bool = False,
+    ) -> bool:
+        """把按旧平台标识保存的档案迁移到新的平台标识下。
+
+        - 新标识下尚无档案：直接迁移文件（clear_display_name 为 True 时清除显示名，用于清理合成昵称）；
+        - 新标识下已有档案：把旧档案的列表字段合并过去（不覆盖显示名与当前状态），再删除旧档案。
+
+        两种情况都不会让新档案被旧数据覆盖。
+        """
+        if not old_platform or not new_platform or old_platform == new_platform:
+            return False
+        if not user_id or user_id == "unknown":
+            return False
+
+        old_path = self._path(old_platform, user_id)
+        if not old_path.exists():
+            return False
+
+        try:
+            old_data = json.loads(old_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            return False
+        if not isinstance(old_data, dict):
+            return False
+        old_profile = _normalize_profile(old_data, old_platform, user_id)
+
+        new_path = self._path(new_platform, user_id)
+        if new_path.exists():
+            try:
+                new_data = json.loads(new_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, UnicodeDecodeError):
+                return False
+            if not isinstance(new_data, dict):
+                return False
+            # 已有真实档案：只并入列表字段，保留其显示名与当前状态
+            target = _normalize_profile(new_data, new_platform, user_id)
+            incoming = {field: old_profile.get(field) for field in LIST_FIELDS}
+            changed = merge_profile_data(target, incoming)
+            old_status = str((old_profile.get("status") or {}).get("summary") or "").strip()
+            new_status = str((target.get("status") or {}).get("summary") or "").strip()
+            if old_status and not new_status:
+                target["status"] = {"summary": old_status, "updated_at": now_str()}
+                changed = True
+            if changed:
+                target["updated_at"] = now_str()
+        else:
+            target = _normalize_profile(old_data, new_platform, user_id)
+            if clear_display_name:
+                target["display_name"] = ""
+
+        try:
+            payload = json.dumps(target, ensure_ascii=False, indent=2)
+            tmp_path = new_path.with_name(new_path.name + ".tmp")
+            tmp_path.write_text(payload, encoding="utf-8")
+            os.replace(tmp_path, new_path)
+            old_path.unlink()
+        except OSError as exc:
+            if self._logger:
+                self._logger.warning(f"[user_dossier] 迁移档案失败 {old_path.name}: {exc}")
+            return False
+
+        self._cache.pop(self.cache_key(old_platform, user_id), None)
+        self._remember(self.cache_key(new_platform, user_id), target)
+        return True
+
     async def clear(self, platform: str, user_id: str) -> bool:
         """删除档案及其导出文件，返回是否确实删除了档案文件。"""
         key = self.cache_key(platform, user_id)

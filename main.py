@@ -104,6 +104,43 @@ async def _json_body() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _platform_of(event: AstrMessageEvent) -> str:
+    """解析事件所属的平台标识。
+
+    使用平台 ID（与 unified_msg_origin 首段一致）而非平台名称：
+    定时任务唤醒的合成事件会把平台名称覆写为 "cron"，
+    但平台 ID 仍指向真实适配器，因此只能用平台 ID 定位档案。
+    """
+    platform = ""
+    try:
+        platform = str(event.get_platform_id() or "").strip()
+    except Exception:
+        platform = ""
+    if not platform and _is_cron_event(event):
+        # cron 事件的平台 ID 即真实会话的平台段，退化时再取 unified_msg_origin
+        platform = str(getattr(event, "unified_msg_origin", "") or "").partition(":")[0]
+    if not platform:
+        platform = str(event.get_platform_name() or "").strip()
+    return platform or "unknown"
+
+
+def _is_cron_event(event: AstrMessageEvent) -> bool:
+    """判断事件是否由定时任务（含未来任务唤醒）触发。"""
+    return str(event.get_platform_name() or "") == "cron"
+
+
+def _is_synthetic_event(event: AstrMessageEvent) -> bool:
+    """判断是否为没有真实用户身份的合成事件。
+
+    未绑定投递会话的定时任务会使用 "cron:OtherMessage:<job_id>" 作为会话，
+    这类事件不代表任何真实用户，不应读写用户档案。
+    """
+    if not _is_cron_event(event):
+        return False
+    umo_platform = str(getattr(event, "unified_msg_origin", "") or "").partition(":")[0]
+    return umo_platform in ("", "cron")
+
+
 def _build_reminder_text(count: int) -> str:
     """构造注入给 LLM 的档案维护提醒。"""
     return (
@@ -138,6 +175,7 @@ class UserDossierPlugin(Star):
         self._pending: set[str] = set()
         self._dialogues: dict[str, deque[dict[str, str]]] = {}
         self._last_umos: dict[str, str] = {}
+        self._migrations_done: set[str] = set()
         self._llm_sem = asyncio.Semaphore(2)
         self._register_web_apis(plugin_name)
 
@@ -153,14 +191,50 @@ class UserDossierPlugin(Star):
 
     @staticmethod
     def _session_key(event: AstrMessageEvent) -> str:
-        platform = event.get_platform_name() or "unknown"
+        platform = _platform_of(event)
         sender = str(event.get_sender_id() or "unknown")
         return f"{platform}:{sender}"
 
+    async def _resolve_identity(
+        self, event: AstrMessageEvent, user_id: str | None = None
+    ) -> tuple[str, str]:
+        """解析事件对应的档案标识 (平台, 用户ID)，并顺带迁移历史档案。
+
+        统一按平台 ID 定位档案：定时任务唤醒的合成事件会把平台名称覆写为 "cron"
+        （昵称也变成 "Scheduler"），但平台 ID 仍指向真实适配器。
+        另外顺带把历史上按平台名称、或误按 "cron" 保存的档案迁移到平台 ID 下，
+        避免数据丢失。
+        """
+        platform, _, sender = self._session_key(event).partition(":")
+        target = user_id if user_id is not None else sender
+        if not target or target == "unknown":
+            return platform, target
+
+        name = str(event.get_platform_name() or "")
+        candidates: list[str] = []
+        if name and name != platform:
+            candidates.append(name)
+        if "cron" not in candidates:
+            candidates.append("cron")  # 清理定时任务误建的档案
+        for old in candidates:
+            marker = f"{old}>{platform}>{target}"
+            if marker in self._migrations_done:
+                continue
+            self._migrations_done.add(marker)
+            try:
+                await self.store.rename_identity(
+                    old, platform, target, clear_display_name=(old == "cron")
+                )
+            except Exception as exc:
+                logger.warning(f"[user_dossier] 迁移历史档案失败: {exc}")
+        return platform, target
+
     @staticmethod
-    def _split_key(key: str) -> tuple[str, str]:
-        platform, _, user_id = key.partition(":")
-        return platform or "unknown", user_id or "unknown"
+    def _profile_display_name(event: AstrMessageEvent) -> str:
+        """取写入档案用的昵称；定时任务事件的昵称是合成的（Scheduler），忽略。"""
+        if _is_cron_event(event):
+            return ""
+        return event.get_sender_name() or ""
 
     def _dialogue(self, key: str) -> deque[dict[str, str]]:
         """获取（必要时创建）某个用户的对话缓存，按最近使用顺序维持容量。"""
@@ -204,6 +278,14 @@ class UserDossierPlugin(Star):
                 return  # 忽略机器人自己发送的消息
 
             key = self._session_key(event)
+            if _is_synthetic_event(event):
+                # 定时任务未绑定真实用户会话，仅把唤醒指令计入对话缓存，
+                # 供手动总结时参考，不计入档案维护提醒的统计。
+                self._dialogue(key).append(
+                    {"role": "user", "content": text[:DIALOGUE_ITEM_MAX_CHARS]}
+                )
+                return
+
             self._last_umos[key] = event.unified_msg_origin or ""
             self._dialogue(key).append({"role": "user", "content": text[:DIALOGUE_ITEM_MAX_CHARS]})
 
@@ -221,8 +303,10 @@ class UserDossierPlugin(Star):
         if not self._cfg("enabled", True):
             return
         try:
+            if _is_synthetic_event(event):
+                return  # 无真实用户的合成事件不注入档案，也不消费提醒
             key = self._session_key(event)
-            platform, user_id = self._split_key(key)
+            platform, user_id = await self._resolve_identity(event)
             chunks: list[str] = []
 
             if self._cfg("inject_enabled", True):
@@ -284,12 +368,14 @@ class UserDossierPlugin(Star):
         if not self._cfg("enabled", True) or not self._cfg("tool_enabled", True):
             return "档案功能当前未启用，无需记录。"
         try:
+            if _is_synthetic_event(event):
+                return "当前不是真实用户会话，未记录。"
             key = self._session_key(event)
-            platform, user_id = self._split_key(key)
+            platform, user_id = await self._resolve_identity(event)
             receipt = await self.store.upsert(
                 platform=platform,
                 user_id=user_id,
-                display_name=event.get_sender_name() or "",
+                display_name=self._profile_display_name(event),
                 category=str(category or ""),
                 content=str(content or ""),
             )
@@ -313,8 +399,7 @@ class UserDossierPlugin(Star):
             if not self._cfg("enabled", True):
                 yield event.plain_result("用户档案功能已关闭。")
                 return
-            key = self._session_key(event)
-            platform, user_id = self._split_key(key)
+            platform, user_id = await self._resolve_identity(event)
             profile = await self.store.load(platform, user_id)
             if not profile or not profile_has_content(profile):
                 yield event.plain_result(
@@ -339,7 +424,7 @@ class UserDossierPlugin(Star):
                 yield event.plain_result("用户档案功能已关闭。")
                 return
             key = self._session_key(event)
-            platform, user_id = self._split_key(key)
+            platform, user_id = await self._resolve_identity(event)
             dialogue = list(self._dialogues.get(key) or [])
             if not dialogue:
                 yield event.plain_result("最近还没有可总结的对话，先聊几句再来吧。")
@@ -374,7 +459,7 @@ class UserDossierPlugin(Star):
             changed = await self.store.merge_from_llm(
                 platform=platform,
                 user_id=user_id,
-                display_name=event.get_sender_name() or "",
+                display_name=self._profile_display_name(event),
                 data=data,
             )
             # 已总结的对话不再重复参与下次总结
@@ -403,11 +488,11 @@ class UserDossierPlugin(Star):
                 )
                 return
             key = self._session_key(event)
-            platform, user_id = self._split_key(key)
+            platform, user_id = await self._resolve_identity(event)
             receipt = await self.store.upsert(
                 platform=platform,
                 user_id=user_id,
-                display_name=event.get_sender_name() or "",
+                display_name=self._profile_display_name(event),
                 category="note",
                 content=content,
             )
@@ -431,7 +516,7 @@ class UserDossierPlugin(Star):
                 )
                 return
             key = self._session_key(event)
-            platform, user_id = self._split_key(key)
+            platform, user_id = await self._resolve_identity(event)
             removed = await self.store.clear(platform, user_id)
             self._forget_user(key)
             yield event.plain_result("🗑️ 档案已清除。" if removed else "档案本来就是空的。")
@@ -446,8 +531,7 @@ class UserDossierPlugin(Star):
             if not self._cfg("enabled", True):
                 yield event.plain_result("用户档案功能已关闭。")
                 return
-            key = self._session_key(event)
-            platform, user_id = self._split_key(key)
+            platform, user_id = await self._resolve_identity(event)
             profile = await self.store.load(platform, user_id)
             if not profile or not profile_has_content(profile):
                 yield event.plain_result("你的档案还是空的，暂时没有可导出的内容。")
@@ -478,7 +562,7 @@ class UserDossierPlugin(Star):
                 return
             action = parts[0].lower()
             target_id = parts[1].strip()
-            platform, _ = self._split_key(self._session_key(event))
+            platform, _ = await self._resolve_identity(event, user_id=target_id)
 
             if action == "view":
                 profile = await self.store.load(platform, target_id, create=False)

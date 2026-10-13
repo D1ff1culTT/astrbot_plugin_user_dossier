@@ -118,6 +118,9 @@ git clone https://github.com/D1ff1culTT/astrbot_plugin_user_dossier
 **Q：AI 一直没有记录我的信息？**
 A：确认 `enabled` 和 `tool_enabled` 均开启，且所用模型支持 function calling；也可以直接用 `/profile teach` 或 `/profile update`。
 
+**Q：定时任务（未来任务）唤醒 AI 总结时，会不会记到别的档案里？**
+A：不会。定时任务唤醒时 AstrBot 会把事件的平台名改写为 `cron`、昵称写成 `Scheduler`，但插件统一以**平台 ID** 定位档案，因此仍会写入该用户的真实档案（v1.1.1 起）。早期版本误建的 `cron:Scheduler` 档案会在该用户下次发言时自动迁移合并回真实档案。
+
 **Q：档案会占用很多 token 吗？**
 A：注入时按 `inject_max_chars` 截断（默认 1200 字符），并且只注入当前对话用户的档案。
 
